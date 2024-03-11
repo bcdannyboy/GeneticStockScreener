@@ -15,9 +15,65 @@ import (
 )
 
 type GA struct {
-	PopulationSize int
-	Generations    int
-	APIClient      *FMP.FMPAPI
+	PopulationSize     int
+	Generations        int
+	APIClient          *FMP.FMPAPI
+	TickerFundamentals map[string]*Individual
+	BestPortfolio      []string
+}
+
+func (ga *GA) PreFetchFundamentals(TickerPopulation []string) error {
+	ga.TickerFundamentals = make(map[string]*Individual, len(TickerPopulation))
+	var wg sync.WaitGroup
+	semaphore := make(chan struct{}, runtime.NumCPU())
+
+	// Create a ticker that ticks every 6 seconds.
+	rateLimiter := time.NewTicker(6 * time.Second)
+	defer rateLimiter.Stop()
+
+	// Use a channel to control the rate of API calls.
+	requests := make(chan struct{}, 10)
+
+	// Pre-fill the requests channel to allow up to 10 immediate requests.
+	for i := 0; i < 10; i++ {
+		requests <- struct{}{}
+	}
+
+	for _, ticker := range TickerPopulation {
+		wg.Add(1)
+		go func(ticker string) {
+			defer wg.Done()
+
+			// Wait for the ability to make a request or for the next tick.
+			select {
+			case <-requests:
+				// Allowed to make a request.
+			case <-rateLimiter.C:
+				// Refill the requests channel every tick (6 seconds) for rate-limiting.
+				for i := 0; i < 10; i++ {
+					select {
+					case requests <- struct{}{}:
+					default:
+						// Channel is already full.
+					}
+				}
+				<-requests // Now we can proceed after ensuring rate limiting.
+			}
+
+			semaphore <- struct{}{}        // Acquire a token to limit concurrency.
+			defer func() { <-semaphore }() // Release the token.
+
+			individual, err := ga.NewRandomIndividual(ticker)
+			if err != nil {
+				fmt.Printf("Error fetching fundamentals for ticker %s: %v\n", ticker, err)
+				return
+			}
+			fmt.Printf("Fetched fundamentals for %s\n", ticker)
+			ga.TickerFundamentals[ticker] = individual
+		}(ticker)
+	}
+	wg.Wait()
+	return nil
 }
 
 func NewGA(populationSize, generations int, APIClient *FMP.FMPAPI) *GA {
@@ -29,41 +85,49 @@ func NewGA(populationSize, generations int, APIClient *FMP.FMPAPI) *GA {
 }
 
 func (ga *GA) GenerateAllIndividuals(TickerPopulation []string) ([]*Individual, error) {
-	fmt.Printf("Generating initial population of %d individuals\n", len(TickerPopulation))
+	fmt.Printf("Generating initial population\n")
 	rand.Seed(time.Now().UnixNano())
 
-	individuals := make([]*Individual, len(TickerPopulation))
+	// Determine the actual size of the initial population
+	popSize := ga.PopulationSize
+	if len(TickerPopulation) > popSize {
+		popSize = len(TickerPopulation)
+	}
+
 	var wg sync.WaitGroup
-	// A buffered channel to limit goroutines
 	semaphore := make(chan struct{}, runtime.NumCPU())
+	tickerRateLimit := time.NewTicker(time.Minute / 10)
+	defer tickerRateLimit.Stop()
 
-	// Create a ticker for rate limiting to 10 operations per minute
-	ticker := time.NewTicker(time.Minute / 10)
-	defer ticker.Stop()
+	// Creating a slice to hold the generated individuals
+	individuals := make([]*Individual, 0, popSize)
 
-	for i, symbol := range TickerPopulation {
+	for i := 0; i < ga.PopulationSize; i++ {
 		wg.Add(1)
-		go func(i int, symbol string) {
-			semaphore <- struct{}{} // Acquire a token
+		go func(i int) {
 			defer wg.Done()
+			semaphore <- struct{}{}        // Acquire a token
 			defer func() { <-semaphore }() // Release the token
+			<-tickerRateLimit.C            // Rate limit each API call
 
-			<-ticker.C // Wait for the next tick to enforce rate limit
+			// Select a random ticker from the array
+			symbol := TickerPopulation[rand.Intn(len(TickerPopulation))]
+
 			individual, err := ga.NewRandomIndividual(symbol)
 			if err != nil {
-				fmt.Println("Error creating individual:", err)
+				fmt.Printf("Error creating individual: %v\n", err)
 				return
 			}
 
-			// Initialize unique weights for each individual here, inside the loop
 			individualWeights := genetic_weight.InitializeRandomWeight()
 			individual.Weight = &individualWeights
+			individuals = append(individuals, individual)
 
 			fmt.Printf("Generated individual %d: %s with unique weights\n", i, individual.Symbol)
-			individuals[i] = individual
-		}(i, symbol)
+		}(i)
 	}
 	wg.Wait()
+
 	return individuals, nil
 }
 
@@ -118,80 +182,93 @@ func (ga *GA) EvaluatePortfolioFitness(portfolio []*Individual) float64 {
 	return averageScore
 }
 
-func (ga *GA) RunGeneticAlgorithm(PopulationSource []string) {
+func (ga *GA) RunGeneticAlgorithm(TickerPopulation []string) {
 	rand.Seed(time.Now().UnixNano())
 
-	// Initialize a set of weights for the entire population
-	initialWeights := genetic_weight.InitializeRandomWeight()
-
-	// Pre-generate all individuals with initial weights
-	population, err := ga.GenerateAllIndividuals(PopulationSource)
-	if err != nil {
-		fmt.Printf("Error generating initial population: %v\n", err)
+	// Ensure the fundamentals for all tickers are pre-fetched before the GA starts
+	if err := ga.PreFetchFundamentals(TickerPopulation); err != nil {
+		fmt.Println("Error pre-fetching fundamentals:", err)
 		return
 	}
 
 	var bestPortfolioFitness float64
 	var bestWeights *genetic_weight.Weight
 
-	// Main optimization loop
 	for generation := 0; generation < ga.Generations; generation++ {
 		fmt.Printf("Initializing Generation %d\n", generation)
 
-		// Evaluate composite scores in parallel
-		var wg sync.WaitGroup
-		wg.Add(len(population))
-		semaphore := make(chan struct{}, runtime.NumCPU())
+		// Randomize ticker selection for this generation to ensure diversity
+		currentGenerationTickers := make([]string, len(TickerPopulation))
+		copy(currentGenerationTickers, TickerPopulation)
+		rand.Shuffle(len(currentGenerationTickers), func(i, j int) {
+			currentGenerationTickers[i], currentGenerationTickers[j] = currentGenerationTickers[j], currentGenerationTickers[i]
+		})
 
-		for _, individual := range population {
-			go func(individual *Individual) {
-				semaphore <- struct{}{}
-				defer wg.Done()
-				defer func() { <-semaphore }()
-
-				// Apply the same weights to evaluate each individual
-				individual.FundamentalScore = genetic_weight.CompositeWeightScore(individual.Fundamentals, &initialWeights)
-			}(individual)
+		// Generate the population for this generation based on shuffled tickers
+		population := make([]*Individual, ga.PopulationSize)
+		for i := 0; i < ga.PopulationSize; i++ {
+			ticker := currentGenerationTickers[i%len(currentGenerationTickers)]
+			individual := ga.TickerFundamentals[ticker]
+			// Clone the individual to avoid modifying the original in TickerFundamentals
+			clonedIndividual := *individual
+			ciWeight := genetic_weight.InitializeRandomWeight()
+			clonedIndividual.Weight = &ciWeight
+			population[i] = &clonedIndividual
 		}
-		wg.Wait()
 
-		// Select the top performers with unique tickers
+		// Evaluate the population and calculate fitness
+		for _, individual := range population {
+			individual.FundamentalScore = genetic_weight.CompositeWeightScore(individual.Fundamentals, individual.Weight)
+		}
+
+		// Select the top performers
 		topPortfolio := topPerformers(population, 10)
 
-		// Evaluate the fitness of the portfolio
+		// Evaluate the fitness of the top portfolio
 		currentFitness := ga.EvaluatePortfolioFitness(topPortfolio)
-		fmt.Printf("Generation %d: Portfolio Fitness: %f\n", generation, currentFitness)
+		fmt.Printf("Generation %d [%d]: Portfolio Fitness: %f\n", generation, ga.PopulationSize, currentFitness)
 
-		// Check if this generation's portfolio is the best so far
 		if currentFitness > bestPortfolioFitness {
 			bestPortfolioFitness = currentFitness
-			bestWeights = &initialWeights // Consider cloning the weights if they are subject to change
+			// Deep clone the weights to avoid mutation in further generations
+			bestWeights = genetic_weight.CloneWeights(topPortfolio[0].Weight)
+			ga.BestPortfolio = make([]string, len(topPortfolio))
+			for i, ind := range topPortfolio {
+				ga.BestPortfolio[i] = ind.Symbol
+			}
 		}
 
-		// Selection, crossover, and mutation of weights for the next generation
-		// Assume SelectWeights, CrossoverWeights, and MutateWeights are implemented
+		// Genetic operations: selection, crossover, and mutation
 		parentWeights1, parentWeights2 := ga.SelectWeights(population)
-		child := ga.CrossoverWeights(&parentWeights1, &parentWeights2)
-		ga.MutateWeights(child)
-
-		// Prepare for the next generation
-		initialWeights = *child
+		for i := 0; i < len(population); i++ {
+			childWeights := ga.CrossoverWeights(&parentWeights1, &parentWeights2)
+			ga.MutateWeights(childWeights)
+			population[i].Weight = childWeights
+		}
 	}
 
 	fmt.Printf("Optimization Complete. Best Portfolio Fitness: %f\n", bestPortfolioFitness)
+	fmt.Println("Top 10 Stocks in the Best Portfolio:")
+	for _, symbol := range ga.BestPortfolio {
+		fmt.Println(symbol)
+	}
 
+	// Save best weights to a file
+	saveBestWeights(bestWeights)
+}
+
+func saveBestWeights(bestWeights *genetic_weight.Weight) {
 	jBestWeights, err := json.Marshal(bestWeights)
 	if err != nil {
 		fmt.Printf("Error marshalling best weights: %v\n", err)
-		fmt.Printf("Best Weights:\n%v\n", bestWeights)
 		return
 	}
 
 	f := "bestweights.json"
-	err = os.WriteFile(f, jBestWeights, 0644)
-	if err != nil {
+	if err := os.WriteFile(f, jBestWeights, 0644); err != nil {
 		fmt.Printf("Error writing best weights to file: %v\n", err)
-		fmt.Printf("Best Weights:\n%v\n", bestWeights)
 		return
 	}
+
+	fmt.Println("Best weights saved to 'bestweights.json'")
 }

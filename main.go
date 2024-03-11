@@ -26,7 +26,9 @@ func main() {
 		panic(fmt.Errorf("error creating FMP API client: %v", err))
 	}
 
-	ga := genetic.NewGA(500, 100000, FMPAPIClient)
+	ga := genetic.NewGA(10000, 10000, FMPAPIClient)
+
+	// random25 := []string{"AAPL", "MSFT", "GOOGL", "AMZN", "FB", "TSLA", "NVDA", "PYPL", "ADBE", "INTC", "CSCO", "NFLX", "CMCSA", "PEP", "AVGO", "COST", "TMUS", "TXN", "QCOM", "AMGN", "SBUX", "CHTR", "INTU", "ISRG", "AMD"}
 
 	ga.RunGeneticAlgorithm(tickers.SP500Tickers)
 

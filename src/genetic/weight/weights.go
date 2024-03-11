@@ -416,3 +416,44 @@ func InitializeRandomWeight() Weight {
 
 	return weight
 }
+
+func CloneWeights(original *Weight) *Weight {
+	// Directly pass the pointer to the helper function without dereferencing.
+	clonedValue := cloneWeightHelper(reflect.ValueOf(original))
+	// No need to call Interface().(*Weight) as clonedValue is already the correct type.
+	return clonedValue.Interface().(*Weight)
+}
+
+func cloneWeightHelper(original reflect.Value) reflect.Value {
+	// Check if the value is a pointer and obtain its element if so.
+	if original.Kind() == reflect.Ptr {
+		original = original.Elem()
+	}
+
+	// Initialize a new instance of the original value's type.
+	cloned := reflect.New(original.Type())
+
+	// You need to work with the actual struct, so we get the .Elem() of the newly created pointer.
+	clonedElem := cloned.Elem()
+
+	for i := 0; i < original.NumField(); i++ {
+		field := original.Field(i)
+		clonedField := clonedElem.Field(i)
+
+		switch field.Kind() {
+		case reflect.Struct:
+			clonedField.Set(cloneWeightHelper(field.Addr()).Elem()) // Work with the address of struct fields.
+		case reflect.Slice:
+			clonedSlice := reflect.MakeSlice(field.Type(), field.Len(), field.Cap())
+			for j := 0; j < field.Len(); j++ {
+				clonedSlice.Index(j).Set(cloneWeightHelper(field.Index(j).Addr()).Elem()) // Work with slice element addresses.
+			}
+			clonedField.Set(clonedSlice)
+		default:
+			clonedField.Set(field)
+		}
+	}
+
+	// Return the pointer to the cloned value.
+	return cloned
+}
