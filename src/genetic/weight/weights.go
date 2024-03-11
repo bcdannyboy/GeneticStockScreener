@@ -417,43 +417,53 @@ func InitializeRandomWeight() Weight {
 	return weight
 }
 
+// CloneWeights creates a deep copy of the provided Weight structure.
 func CloneWeights(original *Weight) *Weight {
-	// Directly pass the pointer to the helper function without dereferencing.
+	if original == nil {
+		return nil // Return nil directly if original is nil to prevent dereferencing nil pointer
+	}
 	clonedValue := cloneWeightHelper(reflect.ValueOf(original))
-	// No need to call Interface().(*Weight) as clonedValue is already the correct type.
+	if !clonedValue.IsValid() {
+		return nil // Safeguard against invalid operations, though this should generally not occur
+	}
 	return clonedValue.Interface().(*Weight)
 }
 
 func cloneWeightHelper(original reflect.Value) reflect.Value {
-	// Check if the value is a pointer and obtain its element if so.
+	if !original.IsValid() {
+		return reflect.Value{} // Return an invalid reflect.Value for safety
+	}
+
+	// Handle the case where original is a pointer
 	if original.Kind() == reflect.Ptr {
-		original = original.Elem()
-	}
-
-	// Initialize a new instance of the original value's type.
-	cloned := reflect.New(original.Type())
-
-	// You need to work with the actual struct, so we get the .Elem() of the newly created pointer.
-	clonedElem := cloned.Elem()
-
-	for i := 0; i < original.NumField(); i++ {
-		field := original.Field(i)
-		clonedField := clonedElem.Field(i)
-
-		switch field.Kind() {
-		case reflect.Struct:
-			clonedField.Set(cloneWeightHelper(field.Addr()).Elem()) // Work with the address of struct fields.
-		case reflect.Slice:
-			clonedSlice := reflect.MakeSlice(field.Type(), field.Len(), field.Cap())
-			for j := 0; j < field.Len(); j++ {
-				clonedSlice.Index(j).Set(cloneWeightHelper(field.Index(j).Addr()).Elem()) // Work with slice element addresses.
-			}
-			clonedField.Set(clonedSlice)
-		default:
-			clonedField.Set(field)
+		originalElem := original.Elem()
+		if !originalElem.IsValid() {
+			return reflect.New(original.Type().Elem()) // Return a pointer to a new zero value of the original's type
 		}
+		cloned := reflect.New(originalElem.Type())
+		cloned.Elem().Set(cloneWeightHelper(originalElem))
+		return cloned
 	}
 
-	// Return the pointer to the cloned value.
+	// Create a new instance of the type to hold the clone
+	cloned := reflect.New(original.Type()).Elem()
+
+	switch original.Kind() {
+	case reflect.Struct:
+		for i := 0; i < original.NumField(); i++ {
+			clonedField := cloned.Field(i)
+			originalField := original.Field(i)
+			clonedField.Set(cloneWeightHelper(originalField))
+		}
+	case reflect.Slice:
+		clonedSlice := reflect.MakeSlice(original.Type(), original.Len(), original.Cap())
+		for i := 0; i < original.Len(); i++ {
+			clonedSlice.Index(i).Set(cloneWeightHelper(original.Index(i)))
+		}
+		cloned.Set(clonedSlice)
+	default:
+		cloned.Set(original)
+	}
+
 	return cloned
 }

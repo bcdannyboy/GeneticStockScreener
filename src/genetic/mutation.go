@@ -27,10 +27,12 @@ func (ga *GA) mutateStruct(v reflect.Value) {
 }
 
 func (ga *GA) mutateFloat64Field(field reflect.Value) {
-	if rand.Float64() < 0.05 { // Assuming a 5% mutation rate
-		mutationFactor := 1 + (rand.Float64()*0.2 - 0.1) // ±10%
+	if rand.Float64() < ga.MutationRate { // Dynamically use GA's mutation rate
+		mutationFactor := 1 + ((rand.Float64()*2 - 1) * ga.MutationFactor) // Apply MutationFactor
 		mutatedValue := field.Float() * mutationFactor
-		field.SetFloat(mutatedValue)
+		if field.CanSet() {
+			field.SetFloat(mutatedValue)
+		}
 	}
 }
 
