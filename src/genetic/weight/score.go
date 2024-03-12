@@ -14,19 +14,52 @@ func GetPriceChangeScore(PriceChange []objects.StockPriceChange) float64 {
 	Tot := 0
 
 	for _, pc := range PriceChange {
+		// double the weight of negative returns to penalize them
+		if pc.OneD < 0 {
+			pc.OneD *= 2
+		} else if pc.FiveD < 0 {
+			pc.FiveD *= 2
+		} else if pc.OneM < 0 {
+			pc.OneM *= 2
+		} else if pc.ThreeM < 0 {
+			pc.ThreeM *= 2
+		} else if pc.SixM < 0 {
+			pc.SixM *= 2
+		} else if pc.Ytd < 0 {
+			pc.Ytd *= 2
+		} else if pc.OneY < 0 {
+			pc.OneY *= 2
+		} else if pc.FiveY < 0 {
+			pc.FiveY *= 2
+		} else if pc.TenY < 0 {
+			pc.TenY *= 2
+		}
+
+		// penalize stocks with less data (newer enterprises)
+		if pc.OneY == 0 {
+			pc.OneY = -1
+		}
+		if pc.FiveY == 0 {
+			pc.FiveY = -1
+		}
+		if pc.TenY == 0 {
+			pc.TenY = -1
+		}
+
 		Sum += pc.OneD / (24)
 		Sum += pc.FiveD / (24 * 5)
-		Sum += pc.OneM / (24 * 20)
-		Sum += pc.ThreeM / (24 * 60)
-		Sum += pc.SixM / (24 * 120)
-		Sum += pc.Ytd / (24 * 120)
-		Sum += pc.OneY / (24 * 240)
-		Sum += pc.FiveY / (24 * (240 * 5))
-		Sum += pc.TenY / (24 * (240 * 10))
-		Sum += pc.Max / (24 * (240 * 20))
-		Tot += 10
+		Sum += pc.OneM / (24 * 5 * 4)
+		Sum += pc.ThreeM / (24 * 5 * 4 * 3)
+		Sum += pc.SixM / (24 * 5 * 4 * 6)
+		Sum += pc.Ytd / (24 * 5 * 4 * 6) // YTD = 6 months
+		Sum += pc.OneY / (24 * 5 * 4 * 12)
+		Sum += pc.FiveY / (24 * 5 * 4 * 12 * 5)
+		Sum += pc.TenY / (24 * 5 * 4 * 12 * 10)
+		// Sum += pc.Max / (24 * (240 * 20))
+		Tot += 9
 	}
 
+	// should be average return / hr across all timeframes for all stocks in the portfolio
 	return Sum / float64(Tot)
 }
 

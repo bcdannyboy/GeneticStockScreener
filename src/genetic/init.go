@@ -16,7 +16,6 @@ import (
 
 type GA struct {
 	MutationRate       float64
-	MutationFactor     float64
 	PopulationSize     int
 	Generations        int
 	APIClient          *FMP.FMPAPI
@@ -69,10 +68,9 @@ func (ga *GA) PreFetchFundamentals(TickerPopulation []string) error {
 	return nil
 }
 
-func NewGA(mutationRate, mutationFactor float64, populationSize, generations int, APIClient *FMP.FMPAPI) *GA {
+func NewGA(mutationRate float64, populationSize, generations int, APIClient *FMP.FMPAPI) *GA {
 	return &GA{
 		MutationRate:   mutationRate,
-		MutationFactor: mutationFactor,
 		PopulationSize: populationSize,
 		Generations:    generations,
 		APIClient:      APIClient,
@@ -142,6 +140,7 @@ func (ga *GA) RunGeneticAlgorithm(TickerPopulation []string) {
 	}
 
 	var bestPortfolioFitness float64
+	var worstPortfolioFitness float64
 	var bestWeights *genetic_weight.Weight
 	var mutex sync.Mutex
 
@@ -196,6 +195,8 @@ func (ga *GA) RunGeneticAlgorithm(TickerPopulation []string) {
 			for i, individual := range topPortfolio {
 				ga.BestPortfolio[i] = individual.Symbol
 			}
+		} else if currentFitness < worstPortfolioFitness {
+			worstPortfolioFitness = currentFitness
 		}
 		mutex.Unlock()
 
@@ -209,9 +210,16 @@ func (ga *GA) RunGeneticAlgorithm(TickerPopulation []string) {
 			population[i].Weight = child
 			mutex.Unlock()
 		}
+
+		mutRateMin := (0.001 + 0.005) / 2
+		mutRateMax := (0.01 + 0.02) / 2
+		mutRate := mutRateMin + rand.Float64()*(mutRateMax-mutRateMin)
+		mutRate = mutRate + ga.MutationRate // the last generation should have some effect on the mutation rate
+		ga.MutationRate = mutRate / 2
+		fmt.Printf("Adjusted mutation rate for next generation (%d): %f\n", generation+1, ga.MutationRate)
 	}
 
-	fmt.Printf("Optimization Complete. Best Portfolio Fitness: %f\n", bestPortfolioFitness)
+	fmt.Printf("Optimization Complete. Best Portfolio Fitness: %f, Worst Portfolio Fitness: %f, Difference: %f, Best to Worst %: %f\n", bestPortfolioFitness, worstPortfolioFitness, bestPortfolioFitness-worstPortfolioFitness, (bestPortfolioFitness-worstPortfolioFitness)/worstPortfolioFitness*100)
 	fmt.Println("Top 10 Stocks in the Best Portfolio:")
 	for _, symbol := range ga.BestPortfolio {
 		fmt.Println(symbol)

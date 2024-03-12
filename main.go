@@ -28,9 +28,14 @@ func main() {
 		panic(fmt.Errorf("error creating FMP API client: %v", err))
 	}
 
-	ga := genetic.NewGA(0.10, 0.05, 1000, 1000, FMPAPIClient)
+	mutRateMin := (0.001 + 0.005) / 2
+	mutRateMax := (0.01 + 0.02) / 2
+	mutRate := mutRateMin + rand.Float64()*(mutRateMax-mutRateMin)
 
-	randAmt := 25
+	fmt.Printf("Initiating Genetic Algorithm with mutation rate: %f\n", mutRate)
+	ga := genetic.NewGA(mutRate, 1000, 1000, FMPAPIClient)
+
+	randAmt := 100
 	randomX := make([]string, randAmt)
 	rand.Seed(time.Now().UnixNano())
 	for i := 0; i < randAmt; i++ {
