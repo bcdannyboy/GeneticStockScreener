@@ -14,16 +14,16 @@ func GetPriceChangeScore(PriceChange []objects.StockPriceChange) float64 {
 	Tot := 0
 
 	for _, pc := range PriceChange {
-		Sum += pc.OneD
-		Sum += pc.FiveD
-		Sum += pc.OneM
-		Sum += pc.ThreeM
-		Sum += pc.SixM
-		Sum += pc.Ytd
-		Sum += pc.OneY
-		Sum += pc.FiveY
-		Sum += pc.TenY
-		Sum += pc.Max
+		Sum += pc.OneD / (24)
+		Sum += pc.FiveD / (24 * 5)
+		Sum += pc.OneM / (24 * 20)
+		Sum += pc.ThreeM / (24 * 60)
+		Sum += pc.SixM / (24 * 120)
+		Sum += pc.Ytd / (24 * 120)
+		Sum += pc.OneY / (24 * 240)
+		Sum += pc.FiveY / (24 * (240 * 5))
+		Sum += pc.TenY / (24 * (240 * 10))
+		Sum += pc.Max / (24 * (240 * 20))
 		Tot += 10
 	}
 

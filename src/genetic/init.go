@@ -40,7 +40,7 @@ func (ga *GA) PreFetchFundamentals(TickerPopulation []string) error {
 		defer func() { semaphore <- struct{}{} }() // Release the slot when done
 
 		individual, err := ga.NewRandomIndividual(ticker)
-		if err != nil {
+		if err != nil || individual == nil { // Check for errors and nil individual
 			fmt.Printf("Error fetching fundamentals for ticker %s: %v\n", ticker, err)
 			return
 		}
@@ -136,7 +136,6 @@ func (ga *GA) EvaluatePortfolioFitness(portfolio []*Individual) float64 {
 func (ga *GA) RunGeneticAlgorithm(TickerPopulation []string) {
 	rand.Seed(time.Now().UnixNano())
 
-	// Pre-fetch fundamentals for all tickers before the GA starts
 	if err := ga.PreFetchFundamentals(TickerPopulation); err != nil {
 		fmt.Println("Error pre-fetching fundamentals:", err)
 		return
@@ -144,61 +143,71 @@ func (ga *GA) RunGeneticAlgorithm(TickerPopulation []string) {
 
 	var bestPortfolioFitness float64
 	var bestWeights *genetic_weight.Weight
+	var mutex sync.Mutex
 
 	for generation := 0; generation < ga.Generations; generation++ {
 		fmt.Printf("Initializing Generation %d\n", generation)
 
-		// Generate the population for this generation using pre-fetched data
-		population := make([]*Individual, ga.PopulationSize)
-		for i := range population {
+		// Initialize population slice with the desired capacity.
+		population := make([]*Individual, 0, ga.PopulationSize)
+
+		// Fill the population slice.
+		for len(population) < ga.PopulationSize {
 			tickerIndex := rand.Intn(len(TickerPopulation))
 			ticker := TickerPopulation[tickerIndex]
-			individual := ga.TickerFundamentals[ticker]
+			individual, exists := ga.TickerFundamentals[ticker]
 
-			// Clone the individual to work on a copy
+			if !exists || individual == nil {
+				fmt.Printf("Got nil after fetching fundamentals for %s\n", ticker)
+				continue
+			}
+
 			clonedIndividual := &Individual{
 				Symbol:           individual.Symbol,
 				PriceChangeScore: individual.PriceChangeScore,
 				Fundamentals:     individual.Fundamentals,
-				Weight:           genetic_weight.CloneWeights(individual.Weight), // Assume CloneWeights is properly implemented
+				Weight:           genetic_weight.CloneWeights(individual.Weight),
 			}
 
-			population[i] = clonedIndividual
+			mutex.Lock()
+			population = append(population, clonedIndividual)
+			mutex.Unlock()
 		}
 
-		// Evaluate each individual's fitness based on their current weight
+		// Evaluate fitness in parallel
+		var wg sync.WaitGroup
+		wg.Add(len(population))
 		for _, individual := range population {
-			individual.FundamentalScore = genetic_weight.CompositeWeightScore(individual.Fundamentals, individual.Weight)
+			go func(individual *Individual) {
+				defer wg.Done()
+				individual.FundamentalScore = genetic_weight.CompositeWeightScore(individual.Fundamentals, individual.Weight)
+			}(individual)
 		}
+		wg.Wait()
 
-		// Select the top performers to form a new population
 		topPortfolio := topPerformers(population, 10)
 		currentFitness := ga.EvaluatePortfolioFitness(topPortfolio)
-		fmt.Printf("Generation %d: Portfolio Fitness: %f\n", generation, currentFitness)
 
+		mutex.Lock()
 		if currentFitness > bestPortfolioFitness {
 			bestPortfolioFitness = currentFitness
-			// Clone the best weight for future generations
 			bestWeights = genetic_weight.CloneWeights(topPortfolio[0].Weight)
-
-			// Save symbols of the top performers
 			ga.BestPortfolio = make([]string, len(topPortfolio))
 			for i, individual := range topPortfolio {
 				ga.BestPortfolio[i] = individual.Symbol
 			}
 		}
+		mutex.Unlock()
 
-		// Prepare for the next generation: selection, crossover, and mutation
+		// Genetic operations (selection, crossover, mutation)
 		for i := 0; i < len(population); i++ {
-			// Selection: Assume SelectWeights randomly selects two parents from the top performers
-			parent1, parent2 := ga.SelectWeights(topPortfolio)
-			// Crossover: Combine the selected parents to create a child
+			parent1, parent2 := ga.SelectWeights(population)
 			child := ga.CrossoverWeights(&parent1, &parent2)
-			// Mutation: Introduce random changes to the child's weights
 			ga.MutateWeights(child)
 
-			// Update the individual's weight with the newly generated child's weights
+			mutex.Lock()
 			population[i].Weight = child
+			mutex.Unlock()
 		}
 	}
 
@@ -208,7 +217,7 @@ func (ga *GA) RunGeneticAlgorithm(TickerPopulation []string) {
 		fmt.Println(symbol)
 	}
 
-	// Save the best weights to a file for future reference
+	// Save best weights to file
 	saveBestWeights(bestWeights)
 }
 
