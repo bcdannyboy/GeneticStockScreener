@@ -22,6 +22,9 @@ type GA struct {
 	TickerFundamentals map[string]*Individual
 	BestPortfolio      []string
 	mtx                sync.Mutex
+	EliteCount         int
+	CrossoverRate      float64
+	TournamentSize     int
 }
 
 func (ga *GA) PreFetchFundamentals(TickerPopulation []string) error {
@@ -68,12 +71,15 @@ func (ga *GA) PreFetchFundamentals(TickerPopulation []string) error {
 	return nil
 }
 
-func NewGA(mutationRate float64, populationSize, generations int, APIClient *FMP.FMPAPI) *GA {
+func NewGA(mutationRate float64, populationSize, generations, eliteCount int, crossoverRate float64, TournamentSize int, APIClient *FMP.FMPAPI) *GA {
 	return &GA{
 		MutationRate:   mutationRate,
 		PopulationSize: populationSize,
 		Generations:    generations,
 		APIClient:      APIClient,
+		EliteCount:     eliteCount,
+		CrossoverRate:  crossoverRate,
+		TournamentSize: TournamentSize,
 	}
 }
 
@@ -200,16 +206,31 @@ func (ga *GA) RunGeneticAlgorithm(TickerPopulation []string) {
 		}
 		mutex.Unlock()
 
-		// Genetic operations (selection, crossover, mutation)
-		for i := 0; i < len(population); i++ {
-			parent1, parent2 := ga.SelectWeights(population)
-			child := ga.CrossoverWeights(&parent1, &parent2)
-			ga.MutateWeights(child)
+		// Elitism: Keep the best individuals from the previous generation
+		elitePopulation := topPerformers(population, ga.EliteCount)
 
-			mutex.Lock()
-			population[i].Weight = child
-			mutex.Unlock()
+		// Create a new population for the next generation
+		newPopulation := make([]*Individual, 0, ga.PopulationSize)
+
+		// Add the elite individuals to the new population
+		for _, elite := range elitePopulation {
+			newPopulation = append(newPopulation, elite)
 		}
+
+		// Perform genetic operations (selection, crossover, mutation) to fill the remaining population
+		for len(newPopulation) < ga.PopulationSize {
+			parent1, parent2 := ga.SelectWeights(population)
+
+			if rand.Float64() < ga.CrossoverRate {
+				child := ga.CrossoverWeights(&parent1, &parent2)
+				ga.MutateWeights(child)
+				newPopulation = append(newPopulation, &Individual{Weight: child})
+			} else {
+				newPopulation = append(newPopulation, &Individual{Weight: &parent1}, &Individual{Weight: &parent2})
+			}
+		}
+
+		population = newPopulation
 
 		mutRateMin := (0.001 + 0.005) / 2
 		mutRateMax := (0.01 + 0.02) / 2

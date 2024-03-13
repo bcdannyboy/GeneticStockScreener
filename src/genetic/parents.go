@@ -7,32 +7,38 @@ import (
 )
 
 func (ga *GA) SelectWeights(population []*Individual) (genetic_weight.Weight, genetic_weight.Weight) {
-	// Select first pair for the tournament
-	randIndex1 := rand.Intn(len(population))
-	randIndex2 := rand.Intn(len(population))
-	for randIndex1 == randIndex2 {
-		randIndex2 = rand.Intn(len(population)) // Ensure different indexes
+	// Tournament selection
+	tournamentSize := 5
+	tournament1 := make([]*Individual, tournamentSize)
+	tournament2 := make([]*Individual, tournamentSize)
+
+	// Select individuals for the first tournament
+	for i := 0; i < tournamentSize; i++ {
+		randIndex := rand.Intn(len(population))
+		tournament1[i] = population[randIndex]
 	}
 
-	// Determine winner of the first tournament
-	weight1 := *population[randIndex1].Weight
-	if population[randIndex1].FundamentalScore < population[randIndex2].FundamentalScore {
-		weight1 = *population[randIndex2].Weight
+	// Select individuals for the second tournament
+	for i := 0; i < tournamentSize; i++ {
+		randIndex := rand.Intn(len(population))
+		tournament2[i] = population[randIndex]
 	}
 
-	// Select second pair for the tournament
-	randIndex3 := rand.Intn(len(population))
-	randIndex4 := rand.Intn(len(population))
-	for randIndex3 == randIndex4 || randIndex3 == randIndex1 || randIndex3 == randIndex2 || randIndex4 == randIndex1 || randIndex4 == randIndex2 {
-		randIndex3 = rand.Intn(len(population))
-		randIndex4 = rand.Intn(len(population)) // Ensure different indexes and not repeating previous selections
+	// Find the best individual in the first tournament
+	bestIndividual1 := tournament1[0]
+	for i := 1; i < tournamentSize; i++ {
+		if tournament1[i].FundamentalScore > bestIndividual1.FundamentalScore {
+			bestIndividual1 = tournament1[i]
+		}
 	}
 
-	// Determine winner of the second tournament
-	weight2 := *population[randIndex3].Weight
-	if population[randIndex3].FundamentalScore < population[randIndex4].FundamentalScore {
-		weight2 = *population[randIndex4].Weight
+	// Find the best individual in the second tournament
+	bestIndividual2 := tournament2[0]
+	for i := 1; i < tournamentSize; i++ {
+		if tournament2[i].FundamentalScore > bestIndividual2.FundamentalScore {
+			bestIndividual2 = tournament2[i]
+		}
 	}
 
-	return weight1, weight2
+	return *bestIndividual1.Weight, *bestIndividual2.Weight
 }

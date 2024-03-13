@@ -33,9 +33,9 @@ func main() {
 	mutRate := mutRateMin + rand.Float64()*(mutRateMax-mutRateMin)
 
 	fmt.Printf("Initiating Genetic Algorithm with mutation rate: %f\n", mutRate)
-	ga := genetic.NewGA(mutRate, 1000, 1000, FMPAPIClient)
+	ga := genetic.NewGA(mutRate, 1000, 10000, 250, 0.5, 250, FMPAPIClient)
 
-	randAmt := 100
+	randAmt := 500
 	randomX := make([]string, randAmt)
 	rand.Seed(time.Now().UnixNano())
 	for i := 0; i < randAmt; i++ {

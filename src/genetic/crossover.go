@@ -7,61 +7,48 @@ import (
 	genetic_weight "github.com/bcdannyboy/GeneticStockScreener/src/genetic/weight"
 )
 
-func (ga *GA) CrossoverWeights(weight1, weight2 *genetic_weight.Weight) *genetic_weight.Weight {
-	offspringWeight := &genetic_weight.Weight{}
+func (ga *GA) CrossoverWeights(parent1, parent2 *genetic_weight.Weight) *genetic_weight.Weight {
+	child := &genetic_weight.Weight{}
+	childValue := reflect.ValueOf(child).Elem()
+	parent1Value := reflect.ValueOf(parent1).Elem()
+	parent2Value := reflect.ValueOf(parent2).Elem()
 
-	val1 := reflect.ValueOf(weight1).Elem()
-	val2 := reflect.ValueOf(weight2).Elem()
-	valOffspring := reflect.ValueOf(offspringWeight).Elem()
+	ga.crossoverStruct(childValue, parent1Value, parent2Value)
 
-	ga.performUniformCrossover(val1, val2, valOffspring)
-
-	return offspringWeight
+	return child
 }
 
-func (ga *GA) performUniformCrossover(val1, val2, valOffspring reflect.Value) {
-	for i := 0; i < val1.NumField(); i++ {
-		field1 := val1.Field(i)
-		field2 := val2.Field(i)
-		fieldOffspring := valOffspring.Field(i)
+func (ga *GA) crossoverStruct(child, parent1, parent2 reflect.Value) {
+	for i := 0; i < child.NumField(); i++ {
+		childField := child.Field(i)
+		parent1Field := parent1.Field(i)
+		parent2Field := parent2.Field(i)
 
-		switch field1.Kind() {
+		switch childField.Kind() {
 		case reflect.Float64:
-			// For float64 fields, randomly choose the value from parent1 or parent2
 			if rand.Float64() < 0.5 {
-				fieldOffspring.SetFloat(field1.Float())
+				childField.Set(parent1Field)
 			} else {
-				fieldOffspring.SetFloat(field2.Float())
+				childField.Set(parent2Field)
 			}
 		case reflect.Struct:
-			// For structs, recursively perform uniform crossover
-			ga.performUniformCrossover(field1, field2, fieldOffspring)
+			ga.crossoverStruct(childField, parent1Field, parent2Field)
 		case reflect.Slice:
-			// Handle slices, assuming they are slices of float64 for simplicity
-			ga.handleSliceCrossover(field1, field2, fieldOffspring)
+			ga.crossoverSlice(childField, parent1Field, parent2Field)
 		}
 	}
 }
 
-func (ga *GA) handleSliceCrossover(slice1, slice2, sliceOffspring reflect.Value) {
-	// Determine the smaller length to avoid index out of range
-	minLen := min(slice1.Len(), slice2.Len())
-	newSlice := reflect.MakeSlice(slice1.Type(), minLen, minLen)
+func (ga *GA) crossoverSlice(child, parent1, parent2 reflect.Value) {
+	for i := 0; i < child.Len(); i++ {
+		childElement := child.Index(i)
+		parent1Element := parent1.Index(i)
+		parent2Element := parent2.Index(i)
 
-	for i := 0; i < minLen; i++ {
-		if rand.Float64() < 0.5 {
-			newSlice.Index(i).Set(slice1.Index(i))
+		if rand.Float64() < ga.CrossoverRate {
+			childElement.Set(parent1Element)
 		} else {
-			newSlice.Index(i).Set(slice2.Index(i))
+			childElement.Set(parent2Element)
 		}
 	}
-
-	sliceOffspring.Set(newSlice)
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
