@@ -9,58 +9,70 @@ import (
 	"github.com/spacecodewor/fmpcloud-go/objects"
 )
 
-func GetPriceChangeScore(PriceChange []objects.StockPriceChange) float64 {
-	Sum := float64(0)
-	Tot := 0
+func CalculatePortfolioScore(portfolio []*objects.StockDailyCandleList, riskFreeRate float64) float64 {
+	var calmarRatios []float64
+	var sharpeRatios []float64
 
-	for _, pc := range PriceChange {
-		// double the weight of negative returns to penalize them
-		if pc.OneD < 0 {
-			pc.OneD *= 2
-		} else if pc.FiveD < 0 {
-			pc.FiveD *= 2
-		} else if pc.OneM < 0 {
-			pc.OneM *= 2
-		} else if pc.ThreeM < 0 {
-			pc.ThreeM *= 2
-		} else if pc.SixM < 0 {
-			pc.SixM *= 2
-		} else if pc.Ytd < 0 {
-			pc.Ytd *= 2
-		} else if pc.OneY < 0 {
-			pc.OneY *= 2
-		} else if pc.FiveY < 0 {
-			pc.FiveY *= 2
-		} else if pc.TenY < 0 {
-			pc.TenY *= 2
-		}
+	for _, stock := range portfolio {
+		var returns []float64
+		var maxDrawdown float64
+		var previousPeak float64
 
-		// penalize stocks with less data (newer enterprises)
-		if pc.OneY == 0 {
-			pc.OneY = -1
-		}
-		if pc.FiveY == 0 {
-			pc.FiveY = -1
-		}
-		if pc.TenY == 0 {
-			pc.TenY = -1
+		// Buy and hold strategy
+		// Calculate returns and max drawdown for each stock
+		for i := 1; i < len(stock.Historical); i++ {
+			currentPrice := stock.Historical[i].Close
+			previousPrice := stock.Historical[i-1].Close
+			returnValue := (currentPrice - previousPrice) / previousPrice
+			returns = append(returns, returnValue)
+
+			if currentPrice > previousPeak {
+				previousPeak = currentPrice
+			} else {
+				drawdown := (currentPrice - previousPeak) / previousPeak
+				if drawdown < maxDrawdown {
+					maxDrawdown = drawdown
+				}
+			}
 		}
 
-		Sum += pc.OneD / (24)
-		Sum += pc.FiveD / (24 * 5)
-		Sum += pc.OneM / (24 * 5 * 4)
-		Sum += pc.ThreeM / (24 * 5 * 4 * 3)
-		Sum += pc.SixM / (24 * 5 * 4 * 6)
-		Sum += pc.Ytd / (24 * 5 * 4 * 6) // YTD = 6 months
-		Sum += pc.OneY / (24 * 5 * 4 * 12)
-		Sum += pc.FiveY / (24 * 5 * 4 * 12 * 5)
-		Sum += pc.TenY / (24 * 5 * 4 * 12 * 10)
-		// Sum += pc.Max / (24 * (240 * 20))
-		Tot += 9
+		// Calculate Calmar ratio
+		averageReturn := calculateAverage(returns)
+		calmarRatio := averageReturn / math.Abs(maxDrawdown)
+		calmarRatios = append(calmarRatios, calmarRatio)
+
+		// Calculate Sharpe ratio
+		stdDev := calculateStandardDeviation(returns)
+		sharpeRatio := (averageReturn - riskFreeRate) / stdDev
+		sharpeRatios = append(sharpeRatios, sharpeRatio)
 	}
 
-	// should be average return / hr across all timeframes for all stocks in the portfolio
-	return Sum / float64(Tot)
+	// Calculate average Calmar and Sharpe ratios
+	averageCalmarRatio := calculateAverage(calmarRatios)
+	averageSharpeRatio := calculateAverage(sharpeRatios)
+
+	// Calculate combination score
+	combinationScore := (averageCalmarRatio + averageSharpeRatio) / 2
+
+	return combinationScore
+}
+
+func calculateAverage(values []float64) float64 {
+	sum := 0.0
+	for _, value := range values {
+		sum += value
+	}
+	return sum / float64(len(values))
+}
+
+func calculateStandardDeviation(values []float64) float64 {
+	average := calculateAverage(values)
+	sum := 0.0
+	for _, value := range values {
+		sum += math.Pow(value-average, 2)
+	}
+	variance := sum / float64(len(values))
+	return math.Sqrt(variance)
 }
 
 // CompositeWeightScore calculates a weighted score for a company's valuation info based on given weights.

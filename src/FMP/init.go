@@ -21,45 +21,45 @@ func NewFMPAPI(apiKey string) (*FMPAPI, error) {
 	return &FMPAPI{APIClient: APIClient}, nil
 }
 
-func (fmp *FMPAPI) GetValuationInfo(Symbol string, Period objects.CompanyValuationPeriod) (*CompanyValuationInfo, error) {
+func (fmp *FMPAPI) GetValuationInfo(Symbol string, Period objects.CompanyValuationPeriod) (*CompanyValuationInfo, *objects.StockDailyCandleList, error) {
 	KeyMetrics, KeyMetricsTTM, err := fmp.GetKeyMetrics(Symbol, Period)
 	if err != nil {
-		return nil, fmt.Errorf("error getting key metrics: %s", err)
+		return nil, nil, fmt.Errorf("error getting key metrics: %s", err)
 	}
 
 	AvgKeyMetrics := GetAverageKeyMetrics(KeyMetrics)
 
 	Ratios, RatiosTTM, err := fmp.GetRatios(Symbol, Period)
 	if err != nil {
-		return nil, fmt.Errorf("error getting financial ratios: %s", err)
+		return nil, nil, fmt.Errorf("error getting financial ratios: %s", err)
 	}
 
 	AvgRatios := GetAverageFinancialRatios(Ratios)
 
 	CashFlowStatementGrowth, err := fmp.GetCashFlowStatementGrowth(Symbol, Period)
 	if err != nil {
-		return nil, fmt.Errorf("error getting cash flow growth: %s", err)
+		return nil, nil, fmt.Errorf("error getting cash flow growth: %s", err)
 	}
 
 	AvgCashFlowStatementGrowth := GetAverageCashFlowStatementGrowth(CashFlowStatementGrowth)
 
 	IncomeStatementGrowth, err := fmp.GetIncomeStatementGrowth(Symbol, Period)
 	if err != nil {
-		return nil, fmt.Errorf("error getting income statement growth: %s", err)
+		return nil, nil, fmt.Errorf("error getting income statement growth: %s", err)
 	}
 
 	AvgIncomeStatementGrowth := GetAverageIncomeStatementGrowth(IncomeStatementGrowth)
 
 	BalanceSheetStatementGrowth, err := fmp.GetBalanceSheetStatementGrowth(Symbol, Period)
 	if err != nil {
-		return nil, fmt.Errorf("error getting balance sheet statement growth: %s", err)
+		return nil, nil, fmt.Errorf("error getting balance sheet statement growth: %s", err)
 	}
 
 	AvgBalanceSheetStatementGrowth := GetAverageBalanceSheetStatementGrowth(BalanceSheetStatementGrowth)
 
 	FinancialStatementsGrowth, err := fmp.GetFinancialStatementGrowth(Symbol, Period)
 	if err != nil {
-		return nil, fmt.Errorf("error getting financial statements growth: %s", err)
+		return nil, nil, fmt.Errorf("error getting financial statements growth: %s", err)
 	}
 
 	AvgFinancialStatementsGrowth := GetAverageFinancialStatementGrowth(FinancialStatementsGrowth)
@@ -67,11 +67,16 @@ func (fmp *FMPAPI) GetValuationInfo(Symbol string, Period objects.CompanyValuati
 	// only accept companies with full data
 
 	if len(KeyMetrics) == 0 || len(Ratios) == 0 || len(CashFlowStatementGrowth) == 0 || len(IncomeStatementGrowth) == 0 || len(BalanceSheetStatementGrowth) == 0 || len(FinancialStatementsGrowth) == 0 {
-		return nil, fmt.Errorf("error getting valuation info: some data is missing (arrays)")
+		return nil, nil, fmt.Errorf("error getting valuation info: some data is missing (arrays)")
 	}
 
 	if utils.IsZeroValue(KeyMetricsTTM) || utils.IsZeroValue(AvgKeyMetrics) || utils.IsZeroValue(RatiosTTM) || utils.IsZeroValue(AvgRatios) || utils.IsZeroValue(AvgCashFlowStatementGrowth) || utils.IsZeroValue(AvgIncomeStatementGrowth) || utils.IsZeroValue(AvgBalanceSheetStatementGrowth) || utils.IsZeroValue(AvgFinancialStatementsGrowth) {
-		return nil, fmt.Errorf("error getting valuation info: some data is missing (structs)")
+		return nil, nil, fmt.Errorf("error getting valuation info: some data is missing (structs)")
+	}
+
+	priceList, err := fmp.GetHistoricalPrices(Symbol)
+	if err != nil {
+		return nil, nil, fmt.Errorf("error getting historical prices: %s", err)
 	}
 
 	return &CompanyValuationInfo{
@@ -89,5 +94,5 @@ func (fmp *FMPAPI) GetValuationInfo(Symbol string, Period objects.CompanyValuati
 		AvgBalanceSheetStatementGrowth: AvgBalanceSheetStatementGrowth,
 		FinancialStatementsGrowth:      FinancialStatementsGrowth,
 		AvgFinancialStatementsGrowth:   AvgFinancialStatementsGrowth,
-	}, nil
+	}, priceList, nil
 }

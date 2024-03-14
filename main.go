@@ -32,16 +32,23 @@ func main() {
 	mutRateMax := (0.01 + 0.02) / 2
 	mutRate := mutRateMin + rand.Float64()*(mutRateMax-mutRateMin)
 
-	fmt.Printf("Initiating Genetic Algorithm with mutation rate: %f\n", mutRate)
-	ga := genetic.NewGA(mutRate, 1000, 10000, 250, 0.5, 250, FMPAPIClient)
-
-	randAmt := 500
-	randomX := make([]string, randAmt)
-	rand.Seed(time.Now().UnixNano())
-	for i := 0; i < randAmt; i++ {
-		randomX[i] = tickers.SP500Tickers[rand.Intn(len(tickers.SP500Tickers))]
+	tRates, err := FMPAPIClient.APIClient.Economics.TreasuryRates(time.Now().AddDate(0, 0, -1), time.Now())
+	if err != nil {
+		panic(fmt.Errorf("error getting treasury rates: %v", err))
 	}
-	ga.RunGeneticAlgorithm(randomX)
 
-	// ga.RunGeneticAlgorithm(tickers.SP500Tickers)
+	tRate := tRates[0].Year10
+
+	fmt.Printf("Initiating Genetic Algorithm with mutation rate: %f, and 10 year treasury rate: %f\n", mutRate, tRate)
+	ga := genetic.NewGA(mutRate, 10000, 10000, 250, 0.5, 250, tRate, 50, FMPAPIClient)
+
+	// randAmt := 25
+	// randomX := make([]string, randAmt)
+	// rand.Seed(time.Now().UnixNano())
+	// for i := 0; i < randAmt; i++ {
+	// 	randomX[i] = tickers.SP500Tickers[rand.Intn(len(tickers.SP500Tickers))]
+	// }
+	// ga.RunGeneticAlgorithm(randomX)
+
+	ga.RunGeneticAlgorithm(tickers.SP500Tickers)
 }

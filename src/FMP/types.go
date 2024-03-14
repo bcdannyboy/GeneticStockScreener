@@ -2,6 +2,9 @@ package FMP
 
 import "github.com/spacecodewor/fmpcloud-go/objects"
 
+//	type PriceCharts struct {
+//		1D
+//	}
 type ValuationScore struct {
 	AltmanZScore   float64 `json:"AltmanZScore"`
 	PiotroskiScore float64 `json:"PiotroskiScore"`
