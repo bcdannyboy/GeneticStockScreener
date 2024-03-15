@@ -1,6 +1,7 @@
 package genetic
 
 import (
+	"math"
 	"math/rand"
 	"reflect"
 
@@ -28,13 +29,29 @@ func (ga *GA) mutateStruct(v reflect.Value) {
 
 func (ga *GA) mutateFloat64Field(field reflect.Value) {
 	if rand.Float64() < ga.MutationRate { // Dynamically use GA's mutation rate
-
 		mutMin := 0.001
 		mutMax := 0.5
 
+		// Compute the mutation factor
 		mutationFactor := mutMin + rand.Float64()*(mutMax-mutMin)
 
-		mutatedValue := field.Float() * mutationFactor
+		// Randomly decide to increase or decrease
+		changeDirection := rand.Intn(2)*2 - 1 // Results in -1 (decrease) or 1 (increase)
+
+		// Calculate the mutation effect
+		mutationEffect := float64(changeDirection) * mutationFactor
+
+		// Apply mutation based on the current value to ensure it's within the [-1, 1] range
+		currentValue := field.Float()
+		mutatedValue := currentValue + mutationEffect*(1-math.Abs(currentValue))
+
+		// Ensure mutatedValue does not exceed the bounds [-1, 1]
+		if mutatedValue > 1 {
+			mutatedValue = 1
+		} else if mutatedValue < -1 {
+			mutatedValue = -1
+		}
+
 		if field.CanSet() {
 			field.SetFloat(mutatedValue)
 		}

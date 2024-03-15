@@ -10,6 +10,7 @@ import (
 	"github.com/bcdannyboy/GeneticStockScreener/src/genetic"
 	"github.com/bcdannyboy/GeneticStockScreener/src/tickers"
 	"github.com/joho/godotenv"
+	"github.com/spacecodewor/fmpcloud-go/objects"
 )
 
 func main() {
@@ -28,8 +29,9 @@ func main() {
 		panic(fmt.Errorf("error creating FMP API client: %v", err))
 	}
 
-	mutRateMin := (0.001 + 0.005) / 2
-	mutRateMax := (0.01 + 0.02) / 2
+	mutRateMin := 0.001
+	mutRateMax := 0.05
+	rand.Seed(time.Now().UnixNano())
 	mutRate := mutRateMin + rand.Float64()*(mutRateMax-mutRateMin)
 
 	tRates, err := FMPAPIClient.APIClient.Economics.TreasuryRates(time.Now().AddDate(0, 0, -1), time.Now())
@@ -40,15 +42,37 @@ func main() {
 	tRate := tRates[0].Year10
 
 	fmt.Printf("Initiating Genetic Algorithm with mutation rate: %f, and 10 year treasury rate: %f\n", mutRate, tRate)
-	ga := genetic.NewGA(mutRate, 10000, 10000, 250, 0.5, 250, tRate, 50, FMPAPIClient)
 
-	// randAmt := 25
-	// randomX := make([]string, randAmt)
-	// rand.Seed(time.Now().UnixNano())
-	// for i := 0; i < randAmt; i++ {
-	// 	randomX[i] = tickers.SP500Tickers[rand.Intn(len(tickers.SP500Tickers))]
-	// }
-	// ga.RunGeneticAlgorithm(randomX)
+	randAmt := 100
+	randomX := make([]string, randAmt)
+	rand.Seed(time.Now().UnixNano())
+	for i := 0; i < randAmt; i++ {
+		randomX[i] = tickers.SP500Tickers[rand.Intn(len(tickers.SP500Tickers))]
+	}
 
-	ga.RunGeneticAlgorithm(tickers.SP500Tickers)
+	TickerFundamentals := make(map[string]*FMP.CompanyValuationInfo)
+	TickerCandles := make(map[string]*objects.StockDailyCandleList)
+
+	for i, ticker := range randomX {
+		fundamentals, candles, err := FMPAPIClient.GetValuationInfo(ticker, "quarterly")
+		if err != nil {
+			fmt.Printf("Error getting valuation info for %s: %v\n", ticker, err)
+			continue
+		}
+		fmt.Printf("Got valuation info for %s (%d/%d)\n", ticker, i+1, randAmt)
+		TickerFundamentals[ticker] = fundamentals
+		TickerCandles[ticker] = candles
+	}
+
+	ga := genetic.NewGA(mutRate, 100, 1000, 10, 0.5, 25, tRate, 333, FMPAPIClient, TickerFundamentals, TickerCandles)
+
+	topW, bestscore, worstscore, ratio := ga.RunGeneticAlgorithm()
+	genetic.SaveBestWeights(topW)
+	fmt.Printf("Best Portfolio Score: %f\n", bestscore)
+	fmt.Printf("Worst Portfolio Score: %f\n", worstscore)
+	fmt.Printf("best/worst ratio: %f\n", ratio)
+
+	ind := &genetic.Individual{Weight: topW}
+	ind.PortfolioScore = ga.EvaluateIndividual(ind, true)
+	fmt.Printf("Best Portfolio Score (re-evaluated): %f\n", ind.PortfolioScore)
 }

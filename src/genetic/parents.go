@@ -8,7 +8,7 @@ import (
 
 func (ga *GA) SelectWeights(population []*Individual) (genetic_weight.Weight, genetic_weight.Weight) {
 	// Tournament selection
-	tournamentSize := 5
+	tournamentSize := ga.TournamentSize
 	tournament1 := make([]*Individual, tournamentSize)
 	tournament2 := make([]*Individual, tournamentSize)
 
@@ -27,7 +27,7 @@ func (ga *GA) SelectWeights(population []*Individual) (genetic_weight.Weight, ge
 	// Find the best individual in the first tournament
 	bestIndividual1 := tournament1[0]
 	for i := 1; i < tournamentSize; i++ {
-		if tournament1[i].FundamentalScore > bestIndividual1.FundamentalScore {
+		if tournament1[i].PortfolioScore > bestIndividual1.PortfolioScore {
 			bestIndividual1 = tournament1[i]
 		}
 	}
@@ -35,7 +35,7 @@ func (ga *GA) SelectWeights(population []*Individual) (genetic_weight.Weight, ge
 	// Find the best individual in the second tournament
 	bestIndividual2 := tournament2[0]
 	for i := 1; i < tournamentSize; i++ {
-		if tournament2[i].FundamentalScore > bestIndividual2.FundamentalScore {
+		if tournament2[i].PortfolioScore > bestIndividual2.PortfolioScore {
 			bestIndividual2 = tournament2[i]
 		}
 	}

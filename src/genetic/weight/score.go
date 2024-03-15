@@ -1,15 +1,35 @@
 package genetic_weight
 
 import (
+	"fmt"
 	"log"
 	"math"
 	"reflect"
+	"sync"
 
 	"github.com/bcdannyboy/GeneticStockScreener/src/FMP"
 	"github.com/spacecodewor/fmpcloud-go/objects"
 )
 
+var cache = make(map[string]float64)
+var mu sync.Mutex
+
 func CalculatePortfolioScore(portfolio []*objects.StockDailyCandleList, riskFreeRate float64) float64 {
+	if len(cache) > 100000 {
+		// Clear the cache if it gets too large
+		cache = make(map[string]float64)
+	}
+	// Generate a cache key
+	cacheKey := generateCacheKey(portfolio, riskFreeRate)
+
+	// Check if the result is cached
+	mu.Lock()
+	if score, found := cache[cacheKey]; found {
+		mu.Unlock()
+		return score
+	}
+	mu.Unlock()
+
 	var calmarRatios []float64
 	var sharpeRatios []float64
 
@@ -18,8 +38,6 @@ func CalculatePortfolioScore(portfolio []*objects.StockDailyCandleList, riskFree
 		var maxDrawdown float64
 		var previousPeak float64
 
-		// Buy and hold strategy
-		// Calculate returns and max drawdown for each stock
 		for i := 1; i < len(stock.Historical); i++ {
 			currentPrice := stock.Historical[i].Close
 			previousPrice := stock.Historical[i-1].Close
@@ -29,32 +47,42 @@ func CalculatePortfolioScore(portfolio []*objects.StockDailyCandleList, riskFree
 			if currentPrice > previousPeak {
 				previousPeak = currentPrice
 			} else {
-				drawdown := (currentPrice - previousPeak) / previousPeak
-				if drawdown < maxDrawdown {
+				drawdown := (previousPeak - currentPrice) / previousPeak
+				if drawdown > maxDrawdown {
 					maxDrawdown = drawdown
 				}
 			}
 		}
 
-		// Calculate Calmar ratio
 		averageReturn := calculateAverage(returns)
 		calmarRatio := averageReturn / math.Abs(maxDrawdown)
 		calmarRatios = append(calmarRatios, calmarRatio)
 
-		// Calculate Sharpe ratio
 		stdDev := calculateStandardDeviation(returns)
 		sharpeRatio := (averageReturn - riskFreeRate) / stdDev
 		sharpeRatios = append(sharpeRatios, sharpeRatio)
 	}
 
-	// Calculate average Calmar and Sharpe ratios
 	averageCalmarRatio := calculateAverage(calmarRatios)
 	averageSharpeRatio := calculateAverage(sharpeRatios)
 
-	// Calculate combination score
 	combinationScore := (averageCalmarRatio + averageSharpeRatio) / 2
 
+	// Cache the result before returning
+	mu.Lock()
+	cache[cacheKey] = combinationScore
+	mu.Unlock()
+
 	return combinationScore
+}
+
+func generateCacheKey(portfolio []*objects.StockDailyCandleList, riskFreeRate float64) string {
+	// Use the symbols and the risk-free rate to generate a unique key
+	symbols := ""
+	for _, stock := range portfolio {
+		symbols += stock.Symbol + ","
+	}
+	return fmt.Sprintf("%s%f", symbols, riskFreeRate)
 }
 
 func calculateAverage(values []float64) float64 {
@@ -146,8 +174,10 @@ func calculateFieldScore(dataField, weightField reflect.Value) (score float64, w
 				weightValue := weightField.Field(i).Float()
 
 				// Calculate the weighted score for the field.
-				dataValue := field.Float()
-				score += dataValue * weightValue
+				// Multiply the field value by its corresponding weight.
+				score += field.Float() * weightValue
+
+				// Add the absolute value of the weight to the total weight.
 				weight += math.Abs(weightValue)
 			}
 		}
