@@ -60,7 +60,7 @@ func (ga *GA) RunGeneticAlgorithm() (*genetic_weight.Weight, float64, float64, f
 
 		population = pop
 
-		if best <= lastBest {
+		if best >= lastBest {
 			if best > bestPortfolioScore {
 				bestPortfolioScore = best
 				topWeight = topW

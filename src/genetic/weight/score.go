@@ -15,6 +15,8 @@ var cache = make(map[string]float64)
 var mu sync.Mutex
 
 func CalculatePortfolioScore(portfolio []*objects.StockDailyCandleList, riskFreeRate float64) float64 {
+	dailyRiskFreeRate := math.Pow((riskFreeRate+1), 1.0/365) - 1
+
 	if len(cache) > 100000 {
 		// Clear the cache if it gets too large
 		cache = make(map[string]float64)
@@ -47,7 +49,7 @@ func CalculatePortfolioScore(portfolio []*objects.StockDailyCandleList, riskFree
 		stdDev := calculateStandardDeviation(returns)
 
 		if stdDev != 0 {
-			sharpeRatio := (averageReturn - riskFreeRate) / stdDev
+			sharpeRatio := (averageReturn - dailyRiskFreeRate) / stdDev
 			sharpeRatios = append(sharpeRatios, sharpeRatio)
 		}
 	}
