@@ -31,37 +31,20 @@ func CalculatePortfolioScore(portfolio []*objects.StockDailyCandleList, riskFree
 	}
 	mu.Unlock()
 
-	var calmarRatios []float64
 	var sharpeRatios []float64
 
 	for _, stock := range portfolio {
 		var returns []float64
-		var maxDrawdown float64
-		var previousPeak float64
 
 		for i := 1; i < len(stock.Historical); i++ {
 			currentPrice := stock.Historical[i].Close
 			previousPrice := stock.Historical[i-1].Close
 			returnValue := (currentPrice - previousPrice) / previousPrice
 			returns = append(returns, returnValue)
-
-			if currentPrice > previousPeak {
-				previousPeak = currentPrice
-			} else {
-				drawdown := (previousPeak - currentPrice) / previousPeak
-				if drawdown > maxDrawdown {
-					maxDrawdown = drawdown
-				}
-			}
 		}
 
 		averageReturn := calculateAverage(returns)
 		stdDev := calculateStandardDeviation(returns)
-
-		if maxDrawdown != 0 {
-			calmarRatio := averageReturn / maxDrawdown
-			calmarRatios = append(calmarRatios, calmarRatio)
-		}
 
 		if stdDev != 0 {
 			sharpeRatio := (averageReturn - riskFreeRate) / stdDev
@@ -69,17 +52,14 @@ func CalculatePortfolioScore(portfolio []*objects.StockDailyCandleList, riskFree
 		}
 	}
 
-	averageCalmarRatio := calculateAverage(calmarRatios)
 	averageSharpeRatio := calculateAverage(sharpeRatios)
-
-	combinationScore := (averageCalmarRatio + averageSharpeRatio) / 2
 
 	// Cache the result before returning
 	mu.Lock()
-	cache[cacheKey] = combinationScore
+	cache[cacheKey] = averageSharpeRatio
 	mu.Unlock()
 
-	return combinationScore
+	return averageSharpeRatio
 }
 
 func generateCacheKey(portfolio []*objects.StockDailyCandleList, riskFreeRate float64) string {

@@ -69,7 +69,7 @@ func main() {
 	}
 
 	cpuCount := runtime.NumCPU()
-	ga := genetic.NewGA(mutRate, 10000, 10000, 1000, 0.5, 250, tRate, 1250, FMPAPIClient, TickerFundamentals, TickerCandles, cpuCount*2)
+	ga := genetic.NewGA(mutRate, 1000, 100000, 500, 0.5, 500, tRate, 12500, FMPAPIClient, TickerFundamentals, TickerCandles, cpuCount*2)
 
 	topW, bestscore, worstscore, ratio := ga.RunGeneticAlgorithm()
 	genetic.SaveBestWeights(topW)
