@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"runtime"
 	"time"
 
 	"github.com/bcdannyboy/GeneticStockScreener/src/FMP"
@@ -43,7 +44,7 @@ func main() {
 
 	fmt.Printf("Initiating Genetic Algorithm with mutation rate: %f, and 10 year treasury rate: %f\n", mutRate, tRate)
 
-	// randAmt := 100
+	// randAmt := 52
 	// randomX := make([]string, randAmt)
 	// rand.Seed(time.Now().UnixNano())
 	// for i := 0; i < randAmt; i++ {
@@ -53,7 +54,7 @@ func main() {
 	TickerFundamentals := make(map[string]*FMP.CompanyValuationInfo)
 	TickerCandles := make(map[string]*objects.StockDailyCandleList)
 
-	//fullTicker := randomX
+	// fullTicker := randomX
 	fullTicker := tickers.SP500Tickers
 
 	for i, ticker := range fullTicker {
@@ -67,7 +68,8 @@ func main() {
 		TickerCandles[ticker] = candles
 	}
 
-	ga := genetic.NewGA(mutRate, 100000, 1000000, 10000, 0.5, 25000, tRate, 10000, FMPAPIClient, TickerFundamentals, TickerCandles)
+	cpuCount := runtime.NumCPU()
+	ga := genetic.NewGA(mutRate, 100, 1000, 10, 0.5, 25, tRate, 333, FMPAPIClient, TickerFundamentals, TickerCandles, cpuCount*2)
 
 	topW, bestscore, worstscore, ratio := ga.RunGeneticAlgorithm()
 	genetic.SaveBestWeights(topW)

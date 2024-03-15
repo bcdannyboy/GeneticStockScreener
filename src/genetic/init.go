@@ -25,9 +25,10 @@ type GA struct {
 	TournamentSize       int
 	RiskFreeRate         float64
 	AcceptableStagnation int
+	NumWorkers           int
 }
 
-func NewGA(mutationRate float64, populationSize, generations, eliteCount int, crossoverRate float64, TournamentSize int, RiskFreeRate float64, AcceptableStagnation int, APIClient *FMP.FMPAPI, TickerFundamentals map[string]*FMP.CompanyValuationInfo, TickerCandles map[string]*objects.StockDailyCandleList) *GA {
+func NewGA(mutationRate float64, populationSize, generations, eliteCount int, crossoverRate float64, TournamentSize int, RiskFreeRate float64, AcceptableStagnation int, APIClient *FMP.FMPAPI, TickerFundamentals map[string]*FMP.CompanyValuationInfo, TickerCandles map[string]*objects.StockDailyCandleList, numWorkers int) *GA {
 	return &GA{
 		MutationRate:         mutationRate,
 		PopulationSize:       populationSize,
@@ -40,6 +41,7 @@ func NewGA(mutationRate float64, populationSize, generations, eliteCount int, cr
 		AcceptableStagnation: AcceptableStagnation,
 		TickerFundamentals:   TickerFundamentals,
 		TickerCandles:        TickerCandles,
+		NumWorkers:           numWorkers,
 	}
 }
 
@@ -97,19 +99,27 @@ func (ga *GA) RunGeneticAlgorithm() (*genetic_weight.Weight, float64, float64, f
 }
 
 func (ga *GA) introduceDiversity(population []*Individual) {
+	var wg sync.WaitGroup
+	wg.Add(len(population))
+
 	for i := range population {
+		go func(i int) {
+			defer wg.Done()
 
-		minRep := 0.1
-		maxRep := 0.25
-		repChance := minRep + rand.Float64()*(maxRep-minRep)
+			minRep := 0.1
+			maxRep := 0.25
+			repChance := minRep + rand.Float64()*(maxRep-minRep)
 
-		if rand.Float64() < 0.5 { // Apply mutation to 50% of the population
-			ga.MutateWeights(population[i].Weight)
-		} else if rand.Float64() < repChance { // Completely replace between 10% and 33% of the population
-			randW := genetic_weight.InitializeRandomWeight()
-			population[i] = &Individual{Weight: &randW, PortfolioScore: ga.EvaluateIndividual(&Individual{Weight: &randW}, false)}
-		}
+			if rand.Float64() < 0.5 { // Apply mutation to 50% of the population
+				ga.MutateWeights(population[i].Weight)
+			} else if rand.Float64() < repChance { // Completely replace between 10% and 33% of the population
+				randW := genetic_weight.InitializeRandomWeight()
+				population[i] = &Individual{Weight: &randW, PortfolioScore: ga.EvaluateIndividual(&Individual{Weight: &randW}, false)}
+			}
+		}(i)
 	}
+
+	wg.Wait()
 }
 
 func (ga *GA) generateIndividual(nonElites []*Individual) *Individual {
@@ -158,12 +168,19 @@ func (ga *GA) EvolvePopulation(population []*Individual) ([]*Individual, float64
 	var wg sync.WaitGroup
 
 	numToGenerate := ga.PopulationSize - len(elites)
-	for i := 0; i < numToGenerate; i++ {
+	numWorkers := ga.NumWorkers
+	if numWorkers > numToGenerate {
+		numWorkers = numToGenerate
+	}
+
+	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
 		go func(nonElites []*Individual) {
 			defer wg.Done()
-			child := ga.generateIndividual(nonElites)
-			results <- child
+			for j := 0; j < numToGenerate/numWorkers; j++ {
+				child := ga.generateIndividual(nonElites)
+				results <- child
+			}
 		}(nonElites)
 	}
 
@@ -188,21 +205,34 @@ func (ga *GA) EvaluateIndividual(individual *Individual, printTickers bool) floa
 	rand.Seed(time.Now().UnixNano())
 
 	// Calculate fundamentals score for each ticker
-	tickerScores := []TickerScore{}
+	tickerScores := make([]TickerScore, len(ga.TickerFundamentals))
+	var wg sync.WaitGroup
+	wg.Add(len(ga.TickerFundamentals))
+
+	i := 0
 	for ticker, valuationInfo := range ga.TickerFundamentals {
-		score := genetic_weight.CompositeWeightScore(valuationInfo, individual.Weight)
-		tickerScores = append(tickerScores, TickerScore{Ticker: ticker, Score: score})
+		go func(ticker string, valuationInfo *FMP.CompanyValuationInfo, i int) {
+			defer wg.Done()
+			score := genetic_weight.CompositeWeightScore(valuationInfo, individual.Weight)
+			tickerScores[i] = TickerScore{Ticker: ticker, Score: score}
+		}(ticker, valuationInfo, i)
+		i++
 	}
+
+	wg.Wait()
 
 	// Sort tickers based on their score in descending order
 	sort.Slice(tickerScores, func(i, j int) bool {
 		return tickerScores[i].Score > tickerScores[j].Score
 	})
 
-	// Determine the number of tickers to select: rand(10, 50)
-	numTickers := 10 + rand.Intn(40)
+	// Determine the number of tickers to select: rand(10, min(50, length of tickerScores))
+	numTickers := 10
+	if len(tickerScores) > 10 {
+		numTickers += rand.Intn(min(50, len(tickerScores)) - 10)
+	}
 	if printTickers {
-		numTickers = 10
+		numTickers = min(10, len(tickerScores))
 	}
 
 	selectedTickers := tickerScores[:numTickers]
@@ -228,7 +258,6 @@ func (ga *GA) EvaluateIndividual(individual *Individual, printTickers bool) floa
 	}
 
 	// Calculate the portfolio score using financial metrics (Calmar and Sharpe ratios)
-	// Assuming CalculatePortfolioScore function exists and calculates based on the portfolio's performance
 	portfolioScore := genetic_weight.CalculatePortfolioScore(portfolio, ga.RiskFreeRate)
 
 	return portfolioScore
@@ -259,4 +288,11 @@ func (ga *GA) selectElites(population []*Individual, eliteCount int) ([]*Individ
 		eliteCount = len(nonNilPopulation)
 	}
 	return nonNilPopulation[:eliteCount], nonNilPopulation[eliteCount:]
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
