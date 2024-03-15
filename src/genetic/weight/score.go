@@ -19,6 +19,7 @@ func CalculatePortfolioScore(portfolio []*objects.StockDailyCandleList, riskFree
 		// Clear the cache if it gets too large
 		cache = make(map[string]float64)
 	}
+
 	// Generate a cache key
 	cacheKey := generateCacheKey(portfolio, riskFreeRate)
 
@@ -55,12 +56,17 @@ func CalculatePortfolioScore(portfolio []*objects.StockDailyCandleList, riskFree
 		}
 
 		averageReturn := calculateAverage(returns)
-		calmarRatio := averageReturn / math.Abs(maxDrawdown)
-		calmarRatios = append(calmarRatios, calmarRatio)
-
 		stdDev := calculateStandardDeviation(returns)
-		sharpeRatio := (averageReturn - riskFreeRate) / stdDev
-		sharpeRatios = append(sharpeRatios, sharpeRatio)
+
+		if maxDrawdown != 0 {
+			calmarRatio := averageReturn / maxDrawdown
+			calmarRatios = append(calmarRatios, calmarRatio)
+		}
+
+		if stdDev != 0 {
+			sharpeRatio := (averageReturn - riskFreeRate) / stdDev
+			sharpeRatios = append(sharpeRatios, sharpeRatio)
+		}
 	}
 
 	averageCalmarRatio := calculateAverage(calmarRatios)
@@ -86,6 +92,10 @@ func generateCacheKey(portfolio []*objects.StockDailyCandleList, riskFreeRate fl
 }
 
 func calculateAverage(values []float64) float64 {
+	if len(values) == 0 {
+		return 0
+	}
+
 	sum := 0.0
 	for _, value := range values {
 		sum += value
@@ -94,6 +104,10 @@ func calculateAverage(values []float64) float64 {
 }
 
 func calculateStandardDeviation(values []float64) float64 {
+	if len(values) == 0 {
+		return 0
+	}
+
 	average := calculateAverage(values)
 	sum := 0.0
 	for _, value := range values {
