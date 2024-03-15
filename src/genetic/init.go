@@ -79,17 +79,18 @@ func (ga *GA) RunGeneticAlgorithm() (*genetic_weight.Weight, float64, float64, f
 
 		// Introduce a random factor in mutation and crossover adjustments
 		ga.MutationRate = 0.01 + rand.Float64()*0.1 + (rand.Float64() * float64(stagnation) / float64(ga.AcceptableStagnation))
-		ga.CrossoverRate = 0.6 + rand.Float64()*0.4 + (rand.Float64() * float64(stagnation) / float64(ga.AcceptableStagnation))
+		ga.CrossoverRate = 0.8 + rand.Float64()*0.1 + (rand.Float64() * float64(stagnation) / float64(ga.AcceptableStagnation))
 
-		fmt.Printf("Generation (%d/%d): Generation's best: %f, Generation's Worst: %f, Total Best: %f, Total Worst: %f, Mutation Rate: %f, Crossover Rate: %f, Stagnation: %d/%d\n",
-			i, ga.Generations, best, worst, bestPortfolioScore, worstPortfolioScore, ga.MutationRate, ga.CrossoverRate, stagnation, ga.AcceptableStagnation)
+		fmt.Printf("Generation (%d/%d): Generation's best: %f, Generation's Worst: %f, Total Best: %f, Total Worst: %f, Mutation Rate: %f, Crossover Rate: %f, Stagnation: %d/%d, TopRateStagnation: %d/%d\n",
+			i, ga.Generations, best, worst, bestPortfolioScore, worstPortfolioScore, ga.MutationRate, ga.CrossoverRate, stagnation, ga.AcceptableStagnation, secondaryStagnation, int(float64(ga.Generations)*float64(0.75)))
 
-		if stagnation >= ga.AcceptableStagnation || float64(secondaryStagnation) >= (float64(ga.Generations)*float64(0.6)) { // if stagnation of best solution happens for over 60% of population size or stagnation of the local solutions happens for ga.AcceptableStagnation generations
+		if stagnation >= ga.AcceptableStagnation || float64(secondaryStagnation) >= (float64(ga.Generations)*float64(0.75)) { // if stagnation of best solution happens for over 60% of population size or stagnation of the local solutions happens for ga.AcceptableStagnation generations
 			fmt.Println("Stagnation detected, introducing more diversity")
 			ga.introduceDiversity(population)
 			stagnation = 0
 			ga.Generations += ga.Generations / 4
 			ga.AcceptableStagnation += ga.AcceptableStagnation / 4
+			secondaryStagnation = secondaryStagnation / 2
 		}
 
 		lastBest = best
