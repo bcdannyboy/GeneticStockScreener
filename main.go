@@ -43,28 +43,31 @@ func main() {
 
 	fmt.Printf("Initiating Genetic Algorithm with mutation rate: %f, and 10 year treasury rate: %f\n", mutRate, tRate)
 
-	randAmt := 100
-	randomX := make([]string, randAmt)
-	rand.Seed(time.Now().UnixNano())
-	for i := 0; i < randAmt; i++ {
-		randomX[i] = tickers.SP500Tickers[rand.Intn(len(tickers.SP500Tickers))]
-	}
+	// randAmt := 100
+	// randomX := make([]string, randAmt)
+	// rand.Seed(time.Now().UnixNano())
+	// for i := 0; i < randAmt; i++ {
+	// 	randomX[i] = tickers.SP500Tickers[rand.Intn(len(tickers.SP500Tickers))]
+	// }
 
 	TickerFundamentals := make(map[string]*FMP.CompanyValuationInfo)
 	TickerCandles := make(map[string]*objects.StockDailyCandleList)
 
-	for i, ticker := range randomX {
+	//fullTicker := randomX
+	fullTicker := tickers.SP500Tickers
+
+	for i, ticker := range fullTicker {
 		fundamentals, candles, err := FMPAPIClient.GetValuationInfo(ticker, "quarterly")
 		if err != nil {
 			fmt.Printf("Error getting valuation info for %s: %v\n", ticker, err)
 			continue
 		}
-		fmt.Printf("Got valuation info for %s (%d/%d)\n", ticker, i+1, randAmt)
+		fmt.Printf("Got valuation info for %s (%d/%d)\n", ticker, i+1, len(fullTicker))
 		TickerFundamentals[ticker] = fundamentals
 		TickerCandles[ticker] = candles
 	}
 
-	ga := genetic.NewGA(mutRate, 100, 1000, 10, 0.5, 25, tRate, 333, FMPAPIClient, TickerFundamentals, TickerCandles)
+	ga := genetic.NewGA(mutRate, 100000, 1000000, 10000, 0.5, 25000, tRate, 10000, FMPAPIClient, TickerFundamentals, TickerCandles)
 
 	topW, bestscore, worstscore, ratio := ga.RunGeneticAlgorithm()
 	genetic.SaveBestWeights(topW)

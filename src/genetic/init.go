@@ -199,8 +199,8 @@ func (ga *GA) EvaluateIndividual(individual *Individual, printTickers bool) floa
 		return tickerScores[i].Score > tickerScores[j].Score
 	})
 
-	// Determine the number of tickers to select: rand(10, len(tickers available)/2)
-	numTickers := rand.Intn(len(tickerScores)/2-10+1) + 10
+	// Determine the number of tickers to select: rand(10, 50)
+	numTickers := 10 + rand.Intn(40)
 	if printTickers {
 		numTickers = 10
 	}
