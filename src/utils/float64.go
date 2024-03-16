@@ -3,10 +3,12 @@ package utils
 import (
 	"math/rand"
 	"reflect"
+	"time"
 )
 
 func SetRandomFloats(v reflect.Value) {
 	for i := 0; i < v.NumField(); i++ {
+		rand.Seed(time.Now().UnixNano())
 		field := v.Field(i)
 
 		switch field.Kind() {

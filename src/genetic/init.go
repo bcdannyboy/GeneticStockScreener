@@ -53,6 +53,7 @@ func (ga *GA) RunGeneticAlgorithm() (*genetic_weight.Weight, float64, float64, f
 	var topWeight *genetic_weight.Weight
 	stagnation := 0
 	kingDuration := 0
+	stagnated := 0
 
 	for i := 0; i < ga.Generations; i++ {
 		rand.Seed(time.Now().UnixNano()) // Seed for randomness in each generation
@@ -67,6 +68,7 @@ func (ga *GA) RunGeneticAlgorithm() (*genetic_weight.Weight, float64, float64, f
 			kingDuration = 0
 			lastBest = best
 			stagnation = 0 // Reset stagnation
+			stagnated = 0
 		} else if best >= lastBest {
 			kingDuration++
 			lastBest = best
@@ -94,13 +96,14 @@ func (ga *GA) RunGeneticAlgorithm() (*genetic_weight.Weight, float64, float64, f
 		fmt.Printf("Generation (%d/%d): Generation's best: %f, last Best: %f, Generation's Worst: %f, Total Best: %f, Total Worst: %f, Mutation Rate: %f, Crossover Rate: %f, Stagnation: %d/%d, KingDuration: %d\n",
 			i, ga.Generations, best, lastBest, worst, bestPortfolioScore, worstPortfolioScore, ga.MutationRate, ga.CrossoverRate, stagnation, ga.AcceptableStagnation, kingDuration)
 
-		if stagnation >= ga.AcceptableStagnation || float64(kingDuration) >= (float64(ga.Generations)*float64(0.75)) { // if stagnation of best solution happens for over 75% of total generations or stagnation of the local solutions happens for ga.AcceptableStagnation generations
+		if stagnation >= ga.AcceptableStagnation || float64(kingDuration) >= (float64(ga.Generations)*float64(0.75)) && stagnated < 3 { // if stagnation of best solution happens for over 75% of total generations or stagnation of the local solutions happens for ga.AcceptableStagnation generations
 			fmt.Println("Stagnation detected, introducing more diversity")
 			ga.introduceDiversity(population)
 			stagnation = 0
 			ga.Generations += ga.Generations / 4
 			ga.AcceptableStagnation += ga.AcceptableStagnation / 4
 			kingDuration = 0
+			stagnated++
 		}
 	}
 
