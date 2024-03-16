@@ -33,35 +33,48 @@ func CalculatePortfolioScore(portfolio []*objects.StockDailyCandleList, riskFree
 	}
 	mu.Unlock()
 
-	var sharpeRatios []float64
+	var portfolioReturns []float64
 
 	for _, stock := range portfolio {
-		var returns []float64
-
+		var stockReturns []float64
 		for i := 1; i < len(stock.Historical); i++ {
 			currentPrice := stock.Historical[i].Close
 			previousPrice := stock.Historical[i-1].Close
-			returnValue := (currentPrice - previousPrice) / previousPrice
-			returns = append(returns, returnValue)
+			if previousPrice != 0 {
+				returnValue := (currentPrice - previousPrice) / previousPrice
+				stockReturns = append(stockReturns, returnValue)
+			}
 		}
 
-		averageReturn := calculateAverage(returns)
-		stdDev := calculateStandardDeviation(returns)
-
-		if stdDev != 0 {
-			sharpeRatio := (averageReturn - dailyRiskFreeRate) / stdDev
-			sharpeRatios = append(sharpeRatios, sharpeRatio)
+		if len(stockReturns) > 0 {
+			portfolioReturns = append(portfolioReturns, calculateAverage(stockReturns))
 		}
 	}
 
-	averageSharpeRatio := calculateAverage(sharpeRatios)
+	if len(portfolioReturns) > 0 {
+		portfolioAverageReturn := calculateAverage(portfolioReturns)
+		portfolioStdDev := calculateStandardDeviation(portfolioReturns)
 
-	// Cache the result before returning
-	mu.Lock()
-	cache[cacheKey] = averageSharpeRatio
-	mu.Unlock()
+		var sharpeRatio float64
+		if portfolioStdDev != 0 {
+			sharpeRatio = (portfolioAverageReturn - dailyRiskFreeRate) / portfolioStdDev
+		} else {
+			// Handle the case when standard deviation is zero
+			// You can assign a default value or handle it based on your requirements
+			sharpeRatio = 0 // Assign a default value of 0
+		}
 
-	return averageSharpeRatio
+		// Cache the result before returning
+		mu.Lock()
+		cache[cacheKey] = sharpeRatio
+		mu.Unlock()
+
+		return sharpeRatio
+	} else {
+		// Handle the case when the portfolio is empty
+		// You can return a default value or handle it based on your requirements
+		return 0 // Return a default value of 0
+	}
 }
 
 func generateCacheKey(portfolio []*objects.StockDailyCandleList, riskFreeRate float64) string {

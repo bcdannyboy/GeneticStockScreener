@@ -46,7 +46,7 @@ func main() {
 
 	fmt.Printf("Initiating Genetic Algorithm with mutation rate: %f, and 1 year treasury rate: %f which gives a daily risk free rate of: %f\n", mutRate, tRate, dailyRiskFreeRate)
 
-	// randAmt := 52
+	// randAmt := 100
 	// randomX := make([]string, randAmt)
 	// rand.Seed(time.Now().UnixNano())
 	// for i := 0; i < randAmt; i++ {
@@ -71,7 +71,7 @@ func main() {
 	}
 
 	cpuCount := runtime.NumCPU()
-	ga := genetic.NewGA(mutRate, 1000, 100000, 250, 0.5, 250, tRate, 1000, FMPAPIClient, TickerFundamentals, TickerCandles, cpuCount*2)
+	ga := genetic.NewGA(mutRate, 5000, 10000, 500, 0.5, 1000, tRate, 1000, FMPAPIClient, TickerFundamentals, TickerCandles, cpuCount*2)
 
 	topW, bestscore, worstscore, ratio := ga.RunGeneticAlgorithm()
 	genetic.SaveBestWeights(topW)

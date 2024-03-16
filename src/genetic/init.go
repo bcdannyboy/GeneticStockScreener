@@ -61,52 +61,52 @@ func (ga *GA) RunGeneticAlgorithm() (*genetic_weight.Weight, float64, float64, f
 		population = pop
 
 		if best > bestPortfolioScore {
+			fmt.Println("New best portfolio score found")
 			bestPortfolioScore = best
 			topWeight = topW
-			lastBest = best         // Ensure lastBest is updated only when a new best is found
-			stagnation = 0          // Reset stagnation since we found a new best
-			secondaryStagnation = 0 // Reset secondary stagnation as well
+			secondaryStagnation = 0
+			lastBest = best
+			stagnation = 0 // Reset stagnation
+		} else if best >= lastBest {
+			secondaryStagnation++
+			lastBest = best
 		} else {
-			if best == lastBest {
-				secondaryStagnation++
-			} else {
-				stagnation++
-			}
+			stagnation++ // Increment stagnation
 		}
 
 		if worst < worstPortfolioScore {
 			worstPortfolioScore = worst
 		}
 
-		// Dynamically adjust mutation and crossover rates based on stagnation
-		ga.AdjustRatesDynamically(stagnation, secondaryStagnation)
+		// Intelligently adjust mutation and crossover rates based on stagnation and progress
+		stagnationRatio := float64(stagnation) / float64(ga.AcceptableStagnation)
+		progressRatio := float64(i) / float64(ga.Generations)
 
-		if stagnation >= ga.AcceptableStagnation || secondaryStagnation >= ga.Generations/4 {
+		// Increase mutation rate if stagnation is high, decrease if progress is good
+		ga.MutationRate = 0.01 + 0.1*stagnationRatio - 0.05*progressRatio
+		// Increase crossover rate if stagnation is high, decrease if progress is good
+		ga.CrossoverRate = 0.8 + 0.1*stagnationRatio - 0.05*progressRatio
+
+		// Ensure mutation and crossover rates stay within reasonable bounds
+		ga.MutationRate = math.Max(0.01, math.Min(0.5, ga.MutationRate))
+		ga.CrossoverRate = math.Max(0.6, math.Min(0.95, ga.CrossoverRate))
+
+		fmt.Printf("Generation (%d/%d): Generation's best: %f, last Best: %f, Generation's Worst: %f, Total Best: %f, Total Worst: %f, Mutation Rate: %f, Crossover Rate: %f, Stagnation: %d/%d, TopRateStagnation: %d/%d\n",
+			i, ga.Generations, best, lastBest, worst, bestPortfolioScore, worstPortfolioScore, ga.MutationRate, ga.CrossoverRate, stagnation, ga.AcceptableStagnation, secondaryStagnation, int(float64(ga.Generations)*float64(0.75)))
+
+		if stagnation >= ga.AcceptableStagnation || float64(secondaryStagnation) >= (float64(ga.Generations)*float64(0.75)) { // if stagnation of best solution happens for over 60% of population size or stagnation of the local solutions happens for ga.AcceptableStagnation generations
+			fmt.Println("Stagnation detected, introducing more diversity")
 			ga.introduceDiversity(population)
 			stagnation = 0
-			secondaryStagnation = 0
+			ga.Generations += ga.Generations / 4
+			ga.AcceptableStagnation += ga.AcceptableStagnation / 4
+			secondaryStagnation = secondaryStagnation / 2
 		}
-
-		fmt.Printf("Generation (%d/%d): Generation's best: %f, last Best: %f, Generation's Worst: %f, Total Best: %f, Total Worst: %f, Mutation Rate: %f, Crossover Rate: %f, Stagnation: %d/%d, SecondaryStagnation: %d/%d\n",
-			i, ga.Generations, best, lastBest, worst, bestPortfolioScore, worstPortfolioScore, ga.MutationRate, ga.CrossoverRate, stagnation, ga.AcceptableStagnation, secondaryStagnation, ga.Generations/4)
 	}
 
 	return topWeight, bestPortfolioScore, worstPortfolioScore, bestPortfolioScore / worstPortfolioScore
 }
 
-func (ga *GA) AdjustRatesDynamically(stagnation, secondaryStagnation int) {
-	// Adjust the mutation rate dynamically based on stagnation
-	ga.MutationRate = math.Min(0.1, ga.MutationRate+0.01*float64(stagnation))
-
-	// Adjust the crossover rate based on performance metrics
-	if secondaryStagnation > 0 {
-		// If there's secondary stagnation, consider increasing crossover rate to explore new genetic combinations
-		ga.CrossoverRate = math.Min(1.0, ga.CrossoverRate+0.05*float64(secondaryStagnation))
-	} else {
-		// If there's no secondary stagnation, reduce the crossover rate to stabilize the population
-		ga.CrossoverRate = math.Max(0.6, ga.CrossoverRate-0.05*float64(stagnation))
-	}
-}
 func (ga *GA) introduceDiversity(population []*Individual) {
 	var wg sync.WaitGroup
 	wg.Add(len(population))
